@@ -504,6 +504,21 @@ class KASPPAGA_Admin_Dashboard
                     <button type="button" id="kc-save-btn" style="width:100%;background:#49eacb;color:#0a0e1a;border:none;padding:11px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;">
                         Save Changes
                     </button>
+                    <button type="button" id="kc-reset-btn" style="width:100%;margin-top:8px;background:none;border:1px solid #ddd;color:#888;padding:9px;border-radius:6px;font-size:13px;cursor:pointer;">
+                        Reset to Defaults
+                    </button>
+
+                    <!-- Confirmation Modal -->
+                    <div id="kc-reset-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;align-items:center;justify-content:center;">
+                        <div style="background:#fff;border-radius:10px;padding:28px 32px;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+                            <h3 style="margin:0 0 10px;font-size:16px;color:#1d2327;">Reset to defaults?</h3>
+                            <p style="margin:0 0 20px;font-size:13px;color:#666;line-height:1.6;">This will restore all checkout appearance settings to their original values. Your current customizations will be lost.</p>
+                            <div style="display:flex;gap:10px;">
+                                <button type="button" id="kc-reset-confirm" style="flex:1;background:#d63638;color:#fff;border:none;padding:10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Yes, reset</button>
+                                <button type="button" id="kc-reset-cancel" style="flex:1;background:#f0f0f0;color:#333;border:none;padding:10px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Live Preview -->
@@ -693,6 +708,60 @@ class KASPPAGA_Admin_Dashboard
                     saveBtn.disabled = false;
                     saveBtn.textContent = 'Save Changes';
                 });
+            });
+
+            // Reset to defaults
+            const defaults = {
+                accentColor:  '#49eacb',
+                btnText:      '',
+                instructions: '',
+                title:        'Kaspa (KAS)',
+                description:  'Pay with Kaspa cryptocurrency. Fast and secure.',
+                showLogo:     true,
+                feeEnabled:   false,
+                feeType:      'percent',
+                feeAmount:    '0',
+            };
+
+            const modal       = document.getElementById('kc-reset-modal');
+            const resetBtn2   = document.getElementById('kc-reset-btn');
+            const confirmBtn  = document.getElementById('kc-reset-confirm');
+            const cancelBtn   = document.getElementById('kc-reset-cancel');
+
+            resetBtn2.addEventListener('click', function() {
+                modal.style.display = 'flex';
+            });
+            cancelBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+            });
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+
+            confirmBtn.addEventListener('click', function() {
+                modal.style.display = 'none';
+
+                // Reset all form fields
+                accent.value                                          = defaults.accentColor;
+                accentHex.value                                       = defaults.accentColor;
+                btnText.value                                         = defaults.btnText;
+                instruct.value                                        = defaults.instructions;
+                document.getElementById('kc-title').value            = defaults.title;
+                document.getElementById('kc-description').value      = defaults.description;
+                document.getElementById('kc-show-logo').checked      = defaults.showLogo;
+                feeCheck.checked                                      = defaults.feeEnabled;
+                feeType.value                                         = defaults.feeType;
+                feeAmt.value                                          = defaults.feeAmount;
+                feeFields.style.display                               = 'none';
+
+                // Update live preview
+                applyAccent(defaults.accentColor);
+                applyButtonText(defaults.btnText);
+                applyInstructions(defaults.instructions);
+                applyFeeLabel();
+
+                // Auto-save
+                saveBtn.click();
             });
         })();
         </script>
