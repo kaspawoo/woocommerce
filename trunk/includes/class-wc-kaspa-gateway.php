@@ -231,32 +231,6 @@ class KASPPAGA_WC_Gateway extends WC_Payment_Gateway
     }
 
     /**
-     * Override admin_options to grey out Pro fields when no API key is set.
-     */
-    public function admin_options()
-    {
-        parent::admin_options();
-        if (empty($this->brain_secret)) {
-            ?>
-            <style>
-            tr.kaspa-pro-disabled { opacity: 0.45; }
-            tr.kaspa-pro-disabled input,
-            tr.kaspa-pro-disabled select,
-            tr.kaspa-pro-disabled textarea { pointer-events: none; cursor: not-allowed; }
-            </style>
-            <script>
-            (function() {
-                document.querySelectorAll('[data-pro="1"]').forEach(function(el) {
-                    var tr = el.closest('tr');
-                    if (tr) tr.classList.add('kaspa-pro-disabled');
-                });
-            })();
-            </script>
-            <?php
-        }
-    }
-
-    /**
      * Build the description for the exchange rate source setting.
      * Shows a currency-specific note for non-USD stores.
      */
@@ -972,6 +946,23 @@ class KASPPAGA_WC_Gateway extends WC_Payment_Gateway
             });
         })();
         </script>
+
+        <?php if (empty($this->brain_secret)): ?>
+        <style>
+        tr.kaspa-pro-disabled { opacity: 0.45; }
+        tr.kaspa-pro-disabled input,
+        tr.kaspa-pro-disabled select,
+        tr.kaspa-pro-disabled textarea { pointer-events: none; cursor: not-allowed; }
+        </style>
+        <script>
+        (function() {
+            document.querySelectorAll('[data-pro="1"]').forEach(function(el) {
+                var tr = el.closest('tr');
+                if (tr) tr.classList.add('kaspa-pro-disabled');
+            });
+        })();
+        </script>
+        <?php endif; ?>
 
         <?php
     }
