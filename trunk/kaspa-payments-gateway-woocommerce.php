@@ -281,20 +281,22 @@ class KASPPAGA_Plugin
             return;
         }
 
-        // Load email class and register with WooCommerce
-        $email_file = plugin_dir_path(__FILE__) . 'includes/class-kaspa-order-email.php';
-        if (file_exists($email_file)) {
-            require_once $email_file;
-            add_filter('woocommerce_email_classes', array($this, 'register_kaspa_email'));
-        }
+        // Register email class — require the file inside the filter callback
+        // so WC_Email is guaranteed to exist when the class definition is loaded.
+        add_filter('woocommerce_email_classes', array($this, 'register_kaspa_email'));
     }
 
     /**
      * Register the Kaspa order confirmation email with WooCommerce.
+     * File is required here (not in load_includes) so WC_Email is already defined.
      */
     public function register_kaspa_email($email_classes)
     {
-        $email_classes['KASPPAGA_Order_Email'] = new KASPPAGA_Order_Email();
+        $email_file = plugin_dir_path(__FILE__) . 'includes/class-kaspa-order-email.php';
+        if (file_exists($email_file)) {
+            require_once $email_file;
+            $email_classes['KASPPAGA_Order_Email'] = new KASPPAGA_Order_Email();
+        }
         return $email_classes;
     }
 
