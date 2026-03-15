@@ -46,16 +46,6 @@ class KASPPAGA_Admin_Dashboard
      */
     public function add_secondary_submenus()
     {
-        // Sub-menu: Settings (WooCommerce gateway settings)
-        add_submenu_page(
-            'kaspa-payments-gateway',
-            'Settings',
-            'Settings',
-            'manage_woocommerce',
-            'kaspa-settings-redirect',
-            array($this, 'redirect_to_settings')
-        );
-
         // Sub-menu: Checkout Preview
         add_submenu_page(
             'kaspa-payments-gateway',
