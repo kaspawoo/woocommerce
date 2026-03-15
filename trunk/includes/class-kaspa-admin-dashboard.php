@@ -18,6 +18,7 @@ class KASPPAGA_Admin_Dashboard
         add_action('admin_notices', array($this, 'maybe_show_review_notice'));
         add_action('wp_ajax_kasppaga_get_stats', array($this, 'ajax_get_stats'));
         add_action('wp_ajax_kasppaga_dismiss_review_notice', array($this, 'ajax_dismiss_review_notice'));
+        add_action('wp_ajax_kasppaga_save_customizer', array($this, 'ajax_save_customizer'));
     }
 
     /**
@@ -53,6 +54,16 @@ class KASPPAGA_Admin_Dashboard
             'manage_woocommerce',
             'kaspa-settings-redirect',
             array($this, 'redirect_to_settings')
+        );
+
+        // Sub-menu: Checkout Preview
+        add_submenu_page(
+            'kaspa-payments-gateway',
+            'Checkout Preview',
+            'Checkout Preview',
+            'manage_woocommerce',
+            'kaspa-checkout-preview',
+            array($this, 'render_customizer_page')
         );
 
         // Sub-menu: Analytics
@@ -339,6 +350,353 @@ class KASPPAGA_Admin_Dashboard
             });
         });";
         wp_add_inline_script('kaspa-admin-script', $inline_script);
+    }
+
+    /**
+     * AJAX: Save customizer settings.
+     */
+    public function ajax_save_customizer()
+    {
+        check_ajax_referer('kaspa_customizer_save', 'nonce');
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error('Permission denied');
+            return;
+        }
+
+        $settings = get_option('woocommerce_kaspa_settings', array());
+
+        // phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce verified above
+        if (isset($_POST['pro_accent_color'])) {
+            $color = sanitize_hex_color(wp_unslash($_POST['pro_accent_color']));
+            $settings['pro_accent_color'] = $color ?: '#49eacb';
+        }
+        if (isset($_POST['pro_button_text'])) {
+            $settings['pro_button_text'] = sanitize_text_field(wp_unslash($_POST['pro_button_text']));
+        }
+        if (isset($_POST['pro_instructions'])) {
+            $settings['pro_instructions'] = wp_kses(
+                wp_unslash($_POST['pro_instructions']),
+                array('strong' => array(), 'em' => array(), 'a' => array('href' => array(), 'target' => array()))
+            );
+        }
+        if (isset($_POST['pro_show_logo'])) {
+            $settings['show_logo'] = sanitize_text_field(wp_unslash($_POST['pro_show_logo'])) === 'yes' ? 'yes' : 'no';
+        }
+        if (isset($_POST['pro_title'])) {
+            $settings['title'] = sanitize_text_field(wp_unslash($_POST['pro_title']));
+        }
+        if (isset($_POST['pro_description'])) {
+            $settings['description'] = sanitize_textarea_field(wp_unslash($_POST['pro_description']));
+        }
+        if (isset($_POST['pro_fee_enabled'])) {
+            $settings['pro_fee_enabled'] = sanitize_text_field(wp_unslash($_POST['pro_fee_enabled'])) === 'yes' ? 'yes' : 'no';
+        }
+        if (isset($_POST['pro_fee_type'])) {
+            $type = sanitize_text_field(wp_unslash($_POST['pro_fee_type']));
+            $settings['pro_fee_type'] = in_array($type, array('percent', 'flat'), true) ? $type : 'percent';
+        }
+        if (isset($_POST['pro_fee_amount'])) {
+            $settings['pro_fee_amount'] = (string) abs((float) wp_unslash($_POST['pro_fee_amount']));
+        }
+        // phpcs:enable
+
+        update_option('woocommerce_kaspa_settings', $settings);
+        wp_send_json_success('Settings saved');
+    }
+
+    /**
+     * Checkout Preview / Customizer Page
+     */
+    public function render_customizer_page()
+    {
+        $settings    = get_option('woocommerce_kaspa_settings', array());
+        $has_key     = !empty($settings['brain_secret']);
+        $accent      = !empty($settings['pro_accent_color']) ? $settings['pro_accent_color'] : '#49eacb';
+        $btn_text    = !empty($settings['pro_button_text']) ? $settings['pro_button_text'] : 'Pay with KasWare';
+        $instruct    = !empty($settings['pro_instructions']) ? $settings['pro_instructions'] : 'Send the exact KAS amount to the address above. Payment is detected automatically.';
+        $title       = !empty($settings['title']) ? $settings['title'] : 'Kaspa (KAS)';
+        $description = !empty($settings['description']) ? $settings['description'] : 'Pay with Kaspa cryptocurrency. Fast and secure.';
+        $show_logo   = isset($settings['show_logo']) ? $settings['show_logo'] : 'yes';
+        $fee_enabled = !empty($settings['pro_fee_enabled']) && $settings['pro_fee_enabled'] === 'yes';
+        $fee_type    = !empty($settings['pro_fee_type']) ? $settings['pro_fee_type'] : 'percent';
+        $fee_amount  = !empty($settings['pro_fee_amount']) ? (float) $settings['pro_fee_amount'] : 0;
+        $nonce       = wp_create_nonce('kaspa_customizer_save');
+        ?>
+        <div class="wrap" style="max-width:1300px;">
+            <h1 style="margin-bottom:4px;">Checkout Preview</h1>
+            <p style="color:#666;margin-top:0;margin-bottom:24px;">Edit your checkout page appearance. Changes are saved and applied immediately.</p>
+
+            <?php if (!$has_key): ?>
+            <div style="background:#fff8e1;border-left:4px solid #ffb300;padding:12px 16px;margin-bottom:20px;border-radius:0 6px 6px 0;">
+                <strong>Pro features (accent color, button text, instructions, surcharge) require an API key.</strong>
+                <a href="https://kaspawoo.com/#pricing" target="_blank" style="margin-left:8px;">Upgrade to Pro →</a>
+                <br><small style="color:#888;">You can still preview and save — settings activate when you add your API key.</small>
+            </div>
+            <?php endif; ?>
+
+            <div id="kaspa-customizer-saved" style="display:none;background:#d4edda;border:1px solid #c3e6cb;color:#155724;padding:10px 16px;border-radius:6px;margin-bottom:16px;">
+                ✓ Settings saved successfully.
+            </div>
+
+            <div style="display:grid;grid-template-columns:340px 1fr;gap:24px;align-items:start;">
+
+                <!-- Controls Panel -->
+                <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:24px;">
+
+                    <h3 style="margin-top:0;margin-bottom:20px;font-size:15px;border-bottom:1px solid #eee;padding-bottom:10px;">General</h3>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px;">Payment Method Title</label>
+                        <input type="text" id="kc-title" value="<?php echo esc_attr($title); ?>" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;">
+                        <p style="font-size:11px;color:#888;margin:4px 0 0;">Shown next to the radio button at checkout.</p>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px;">Description</label>
+                        <textarea id="kc-description" rows="2" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;resize:vertical;"><?php echo esc_textarea($description); ?></textarea>
+                        <p style="font-size:11px;color:#888;margin:4px 0 0;">Shown under the title at checkout selection.</p>
+                    </div>
+
+                    <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="kc-show-logo" <?php checked($show_logo, 'yes'); ?> style="width:16px;height:16px;">
+                        <label for="kc-show-logo" style="font-size:13px;cursor:pointer;">Show Kaspa logo dot next to title</label>
+                    </div>
+
+                    <h3 style="margin-top:0;margin-bottom:20px;font-size:15px;border-bottom:1px solid #eee;padding-bottom:10px;">Appearance <span style="font-size:11px;color:#49eacb;font-weight:700;letter-spacing:0.5px;">PRO</span></h3>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px;">Accent Color</label>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <input type="color" id="kc-accent-color" value="<?php echo esc_attr($accent); ?>" style="width:44px;height:34px;border:1px solid #ddd;border-radius:5px;cursor:pointer;padding:2px;">
+                            <input type="text" id="kc-accent-hex" value="<?php echo esc_attr($accent); ?>" style="width:90px;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;font-family:monospace;">
+                            <button type="button" id="kc-reset-color" style="font-size:11px;color:#888;background:none;border:none;cursor:pointer;text-decoration:underline;">Reset</button>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px;">KasWare Button Text</label>
+                        <input type="text" id="kc-btn-text" value="<?php echo esc_attr($btn_text); ?>" placeholder="Pay with KasWare" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;">
+                    </div>
+
+                    <div style="margin-bottom:24px;">
+                        <label style="display:block;font-weight:600;font-size:13px;margin-bottom:5px;">Payment Instructions</label>
+                        <textarea id="kc-instructions" rows="3" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;resize:vertical;" placeholder="Send the exact KAS amount to the address above..."><?php echo esc_textarea($instruct); ?></textarea>
+                    </div>
+
+                    <h3 style="margin-top:0;margin-bottom:20px;font-size:15px;border-bottom:1px solid #eee;padding-bottom:10px;">Surcharge <span style="font-size:11px;color:#49eacb;font-weight:700;letter-spacing:0.5px;">PRO</span></h3>
+
+                    <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="kc-fee-enabled" <?php checked($fee_enabled, true); ?> style="width:16px;height:16px;">
+                        <label for="kc-fee-enabled" style="font-size:13px;cursor:pointer;">Enable crypto surcharge</label>
+                    </div>
+
+                    <div id="kc-fee-fields" style="<?php echo $fee_enabled ? '' : 'display:none;'; ?>margin-bottom:16px;">
+                        <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+                            <select id="kc-fee-type" style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;">
+                                <option value="percent" <?php selected($fee_type, 'percent'); ?>>Percentage (%)</option>
+                                <option value="flat" <?php selected($fee_type, 'flat'); ?>>Flat Amount</option>
+                            </select>
+                            <input type="number" id="kc-fee-amount" value="<?php echo esc_attr($fee_amount); ?>" min="0" step="0.01" style="width:90px;padding:8px 10px;border:1px solid #ddd;border-radius:5px;font-size:13px;">
+                        </div>
+                        <p style="font-size:11px;color:#888;margin:0;">e.g. 2 = 2% fee. Added to order before KAS conversion.</p>
+                    </div>
+
+                    <button type="button" id="kc-save-btn" style="width:100%;background:#49eacb;color:#0a0e1a;border:none;padding:11px;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;">
+                        Save Changes
+                    </button>
+                </div>
+
+                <!-- Live Preview -->
+                <div>
+                    <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px 20px 12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:13px;color:#666;">Live preview — updates as you type</span>
+                        <span style="font-size:11px;background:#f0f0f0;padding:3px 8px;border-radius:4px;color:#555;">Order #1234 · $49.99</span>
+                    </div>
+                    <div id="kc-preview" style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+
+                        <!-- Payment Header -->
+                        <div style="text-align:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #eee;">
+                            <h2 id="kcp-heading" style="font-size:22px;font-weight:700;margin:0 0 6px;">Pay 421.85 KAS</h2>
+                            <div style="font-size:13px;color:#888;">Rate: $0.11842 &nbsp;·&nbsp; Updated: 12:34:56</div>
+                        </div>
+
+                        <!-- KasWare Section -->
+                        <div style="background:#f7f7f7;border-radius:10px;padding:16px;margin-bottom:16px;text-align:center;">
+                            <div style="font-size:12px;color:#666;margin-bottom:10px;">
+                                <span id="kcp-badge-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle;"></span>
+                                KasWare Wallet Detected
+                            </div>
+                            <button id="kcp-kasware-btn" style="border:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;width:100%;">
+                                Pay with KasWare
+                            </button>
+                        </div>
+
+                        <!-- Divider -->
+                        <div style="text-align:center;color:#aaa;font-size:12px;margin:14px 0;position:relative;">
+                            <span style="background:#fff;padding:0 10px;position:relative;z-index:1;">or pay manually</span>
+                            <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:#eee;z-index:0;"></div>
+                        </div>
+
+                        <!-- QR + Address -->
+                        <div style="display:flex;gap:20px;align-items:flex-start;margin-bottom:16px;">
+                            <div style="text-align:center;flex-shrink:0;">
+                                <div style="width:120px;height:120px;background:#f0f0f0;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa;border:2px dashed #ddd;">
+                                    QR Code
+                                </div>
+                                <p style="font-size:11px;color:#888;margin:6px 0 0;">Scan to pay</p>
+                            </div>
+                            <div style="flex:1;min-width:0;">
+                                <div style="margin-bottom:10px;">
+                                    <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Payment Address</label>
+                                    <div style="background:#f7f7f7;border:1px solid #eee;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:11px;color:#333;word-break:break-all;">
+                                        kaspa:qr9j2...x7km4
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Amount to Send</label>
+                                    <div style="background:#f7f7f7;border:1px solid #eee;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:13px;font-weight:600;color:#333;">
+                                        421.85000000 KAS
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Fee label -->
+                        <div id="kcp-fee-label" style="display:none;font-size:12px;color:#888;margin-bottom:12px;padding:6px 10px;background:#f9f9f9;border-radius:5px;"></div>
+
+                        <!-- Status -->
+                        <div style="text-align:center;padding:10px;background:#fff8e1;border-radius:6px;margin-bottom:14px;font-size:13px;color:#856404;">
+                            ⏳ Waiting for payment...
+                        </div>
+
+                        <!-- Instructions -->
+                        <div id="kcp-instructions" style="font-size:13px;color:#555;line-height:1.6;border-top:1px solid #eee;padding-top:12px;"></div>
+
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            const accent    = document.getElementById('kc-accent-color');
+            const accentHex = document.getElementById('kc-accent-hex');
+            const btnText   = document.getElementById('kc-btn-text');
+            const instruct  = document.getElementById('kc-instructions');
+            const feeCheck  = document.getElementById('kc-fee-enabled');
+            const feeFields = document.getElementById('kc-fee-fields');
+            const feeType   = document.getElementById('kc-fee-type');
+            const feeAmt    = document.getElementById('kc-fee-amount');
+            const saveBtn   = document.getElementById('kc-save-btn');
+            const resetBtn  = document.getElementById('kc-reset-color');
+
+            // Preview elements
+            const pHeading  = document.getElementById('kcp-heading');
+            const pBtn      = document.getElementById('kcp-kasware-btn');
+            const pBadgeDot = document.getElementById('kcp-badge-dot');
+            const pFeeLabel = document.getElementById('kcp-fee-label');
+            const pInstruct = document.getElementById('kcp-instructions');
+
+            function applyAccent(color) {
+                pBtn.style.background = color;
+                pBtn.style.color = '#0a0e1a';
+                pHeading.style.color = color;
+                pBadgeDot.style.background = color;
+                saveBtn.style.background = color;
+            }
+
+            function applyButtonText(text) {
+                pBtn.textContent = (text || 'Pay with KasWare') + ' — 421.85 KAS';
+            }
+
+            function applyInstructions(text) {
+                pInstruct.textContent = text || '';
+            }
+
+            function applyFeeLabel() {
+                if (!feeCheck.checked) { pFeeLabel.style.display = 'none'; return; }
+                const amt = parseFloat(feeAmt.value) || 0;
+                if (!amt) { pFeeLabel.style.display = 'none'; return; }
+                pFeeLabel.style.display = 'block';
+                pFeeLabel.textContent = feeType.value === 'percent'
+                    ? 'Includes ' + amt + '% crypto surcharge'
+                    : 'Includes $' + amt.toFixed(2) + ' flat surcharge';
+            }
+
+            // Initialise preview
+            applyAccent(accent.value);
+            applyButtonText(btnText.value);
+            applyInstructions(instruct.value);
+            applyFeeLabel();
+
+            // Live updates
+            accent.addEventListener('input', function() {
+                accentHex.value = accent.value;
+                applyAccent(accent.value);
+            });
+            accentHex.addEventListener('input', function() {
+                if (/^#[0-9a-f]{6}$/i.test(accentHex.value)) {
+                    accent.value = accentHex.value;
+                    applyAccent(accentHex.value);
+                }
+            });
+            resetBtn.addEventListener('click', function() {
+                accent.value = '#49eacb';
+                accentHex.value = '#49eacb';
+                applyAccent('#49eacb');
+            });
+            btnText.addEventListener('input', function() { applyButtonText(btnText.value); });
+            instruct.addEventListener('input', function() { applyInstructions(instruct.value); });
+            feeCheck.addEventListener('change', function() {
+                feeFields.style.display = feeCheck.checked ? '' : 'none';
+                applyFeeLabel();
+            });
+            feeType.addEventListener('change', applyFeeLabel);
+            feeAmt.addEventListener('input', applyFeeLabel);
+
+            // Save
+            saveBtn.addEventListener('click', function() {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+
+                const data = new URLSearchParams({
+                    action:             'kasppaga_save_customizer',
+                    nonce:              <?php echo wp_json_encode($nonce); ?>,
+                    pro_accent_color:   accent.value,
+                    pro_button_text:    btnText.value,
+                    pro_instructions:   instruct.value,
+                    pro_title:          document.getElementById('kc-title').value,
+                    pro_description:    document.getElementById('kc-description').value,
+                    pro_show_logo:      document.getElementById('kc-show-logo').checked ? 'yes' : 'no',
+                    pro_fee_enabled:    feeCheck.checked ? 'yes' : 'no',
+                    pro_fee_type:       feeType.value,
+                    pro_fee_amount:     feeAmt.value || '0',
+                });
+
+                fetch(<?php echo wp_json_encode(admin_url('admin-ajax.php')); ?>, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: data.toString(),
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(res) {
+                    const msg = document.getElementById('kaspa-customizer-saved');
+                    if (res.success) {
+                        msg.style.display = 'block';
+                        setTimeout(function() { msg.style.display = 'none'; }, 3000);
+                    } else {
+                        alert('Save failed. Please try again.');
+                    }
+                })
+                .finally(function() {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Changes';
+                });
+            });
+        })();
+        </script>
+        <?php
     }
 
     /**
