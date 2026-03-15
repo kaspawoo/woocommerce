@@ -378,17 +378,33 @@ function kasppaga_enqueue_checkout_assets($gateway_instance, $order_id, $expecte
         $kasware_address = $order ? $order->get_meta('_kaspa_address') : '';
     }
 
+    // Build Pro UI data (only if API key is active)
+    $has_pro = !empty($gateway_instance->brain_secret);
+    $fee_label = '';
+    if ($has_pro && $gateway_instance->pro_fee_enabled === 'yes' && $gateway_instance->pro_fee_amount > 0) {
+        if ($gateway_instance->pro_fee_type === 'percent') {
+            $fee_label = 'Includes ' . $gateway_instance->pro_fee_amount . '% crypto surcharge';
+        } else {
+            $fee_label = 'Includes ' . get_woocommerce_currency_symbol() . number_format($gateway_instance->pro_fee_amount, 2) . ' flat surcharge';
+        }
+    }
+
     wp_localize_script('kaspa-checkout-script', 'kaspaCheckoutData', array(
-        'ajaxUrl' => admin_url('admin-ajax.php'),
-        'currentRate' => $current_rate ? (float) $current_rate : 0,
-        'orderId' => $order_id ? (int) $order_id : 0,
-        'expectedAmount' => $expected_amount,
-        'paymentNonce' => wp_create_nonce('kasppaga_check_payment'),
-        'kaswareNonce' => wp_create_nonce('kasppaga_kasware_confirm'),
-        'paymentAddress' => $kasware_address,
-        'myAccountUrl' => wc_get_page_permalink('myaccount'),
-        'thankYouUrl' => $order ? $order->get_checkout_order_received_url() : '',
-        'siteUrl' => get_site_url(),
+        'ajaxUrl'         => admin_url('admin-ajax.php'),
+        'currentRate'     => $current_rate ? (float) $current_rate : 0,
+        'orderId'         => $order_id ? (int) $order_id : 0,
+        'expectedAmount'  => $expected_amount,
+        'paymentNonce'    => wp_create_nonce('kasppaga_check_payment'),
+        'kaswareNonce'    => wp_create_nonce('kasppaga_kasware_confirm'),
+        'paymentAddress'  => $kasware_address,
+        'myAccountUrl'    => wc_get_page_permalink('myaccount'),
+        'thankYouUrl'     => $order ? $order->get_checkout_order_received_url() : '',
+        'siteUrl'         => get_site_url(),
+        // Pro UI customization
+        'proAccentColor'  => $has_pro ? esc_attr($gateway_instance->pro_accent_color) : '',
+        'proButtonText'   => $has_pro ? esc_attr($gateway_instance->pro_button_text) : '',
+        'proInstructions' => $has_pro ? wp_kses($gateway_instance->pro_instructions, array('strong' => array(), 'em' => array(), 'a' => array('href' => array()))) : '',
+        'feeLabel'        => $fee_label,
     ));
 }
 

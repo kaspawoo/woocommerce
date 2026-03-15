@@ -41,6 +41,14 @@ class KASPPAGA_WC_Gateway extends WC_Payment_Gateway
         $this->brain_url    = $this->get_option('brain_url', '');
         $this->brain_secret = $this->get_option('brain_secret', '');
 
+        // Pro feature settings
+        $this->pro_fee_enabled  = $this->get_option('pro_fee_enabled', 'no');
+        $this->pro_fee_type     = $this->get_option('pro_fee_type', 'percent');
+        $this->pro_fee_amount   = (float) $this->get_option('pro_fee_amount', 0);
+        $this->pro_accent_color = $this->get_option('pro_accent_color', '#49eacb');
+        $this->pro_button_text  = $this->get_option('pro_button_text', '');
+        $this->pro_instructions = $this->get_option('pro_instructions', '');
+
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
         add_action('woocommerce_admin_order_data_after_billing_address', array($this, 'display_kaspa_payment_details'));
@@ -134,7 +142,118 @@ class KASPPAGA_WC_Gateway extends WC_Payment_Gateway
                 'default' => '',
                 'desc_tip' => true,
             ),
+
+            // ── Pro Features ──────────────────────────────────────────────
+            'pro_fee_heading' => array(
+                'title'       => 'Pro: Crypto Surcharge',
+                'type'        => 'title',
+                'description' => empty($this->brain_secret)
+                    ? '🔒 <strong>Pro feature</strong> — requires an API key. <a href="https://kaspawoo.com/#pricing" target="_blank">Upgrade to Pro →</a>'
+                    : '✓ <strong style="color:#46b450;">Pro active.</strong> Add a small surcharge to offset conversion costs.',
+            ),
+            'pro_fee_enabled' => array(
+                'title'             => 'Enable Surcharge',
+                'type'              => 'checkbox',
+                'label'             => 'Add a crypto surcharge to Kaspa orders',
+                'default'           => 'no',
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
+            'pro_fee_type' => array(
+                'title'             => 'Surcharge Type',
+                'type'              => 'select',
+                'options'           => array(
+                    'percent' => 'Percentage (%)',
+                    'flat'    => 'Flat Amount (added to order total)',
+                ),
+                'default'           => 'percent',
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
+            'pro_fee_amount' => array(
+                'title'             => 'Surcharge Amount',
+                'type'              => 'number',
+                'description'       => 'e.g. 1.5 = 1.5% or $1.50 flat. Fee is applied before KAS conversion.',
+                'default'           => '0',
+                'desc_tip'          => true,
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1', 'step' => '0.01', 'min' => '0'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
+
+            'pro_ui_heading' => array(
+                'title'       => 'Pro: Checkout Appearance',
+                'type'        => 'title',
+                'description' => empty($this->brain_secret)
+                    ? '🔒 <strong>Pro feature</strong> — requires an API key. <a href="https://kaspawoo.com/#pricing" target="_blank">Upgrade to Pro →</a>'
+                    : '✓ <strong style="color:#46b450;">Pro active.</strong> Customize the look and feel of your Kaspa checkout.',
+            ),
+            'pro_accent_color' => array(
+                'title'             => 'Accent Color',
+                'type'              => 'color',
+                'description'       => 'Default: #49eacb (Kaspa teal). Applied to buttons and highlights.',
+                'default'           => '#49eacb',
+                'desc_tip'          => true,
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
+            'pro_button_text' => array(
+                'title'             => 'KasWare Button Text',
+                'type'              => 'text',
+                'description'       => 'Custom label for the KasWare pay button. Leave blank for default.',
+                'placeholder'       => 'Pay with KasWare',
+                'default'           => '',
+                'desc_tip'          => true,
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
+            'pro_instructions' => array(
+                'title'             => 'Custom Checkout Instructions',
+                'type'              => 'textarea',
+                'description'       => 'Replaces the default instructions on the payment page. Leave blank to use default.',
+                'default'           => '',
+                'desc_tip'          => true,
+                'custom_attributes' => array_merge(
+                    array('data-pro' => '1'),
+                    empty($this->brain_secret) ? array('disabled' => 'disabled') : array()
+                ),
+            ),
         );
+    }
+
+    /**
+     * Override admin_options to grey out Pro fields when no API key is set.
+     */
+    public function admin_options()
+    {
+        parent::admin_options();
+        if (empty($this->brain_secret)) {
+            ?>
+            <style>
+            tr.kaspa-pro-disabled { opacity: 0.45; }
+            tr.kaspa-pro-disabled input,
+            tr.kaspa-pro-disabled select,
+            tr.kaspa-pro-disabled textarea { pointer-events: none; cursor: not-allowed; }
+            </style>
+            <script>
+            (function() {
+                document.querySelectorAll('[data-pro="1"]').forEach(function(el) {
+                    var tr = el.closest('tr');
+                    if (tr) tr.classList.add('kaspa-pro-disabled');
+                });
+            })();
+            </script>
+            <?php
+        }
     }
 
     /**
@@ -312,13 +431,22 @@ class KASPPAGA_WC_Gateway extends WC_Payment_Gateway
      */
     public function calculate_kaspa_amount($fiat_amount)
     {
+        // Apply Pro surcharge if API key is active and fee is configured
+        $effective_fiat = (float) $fiat_amount;
+        if (!empty($this->brain_secret) && $this->pro_fee_enabled === 'yes' && $this->pro_fee_amount > 0) {
+            if ($this->pro_fee_type === 'percent') {
+                $effective_fiat = $fiat_amount * (1 + $this->pro_fee_amount / 100);
+            } else {
+                $effective_fiat = $fiat_amount + $this->pro_fee_amount;
+            }
+        }
+
         $rate = $this->get_kas_rate();
         if (!$rate || $rate <= 0) {
             return 0; // Caller must check rate; do not use a hardcoded fallback
         }
 
-        $kas_amount = round($fiat_amount / $rate, 8);
-        return $kas_amount;
+        return round($effective_fiat / $rate, 8);
     }
 
     /**

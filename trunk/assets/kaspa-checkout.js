@@ -723,6 +723,51 @@
     // No WebSocket monitoring needed
 
     /**
+     * Apply Pro UI customizations (accent color, button text, instructions, fee label).
+     * Runs after DOM is ready so elements exist.
+     */
+    function applyProCustomizations() {
+        const d = window.kaspaCheckoutData || {};
+
+        // Accent color override — inject a style tag
+        if (d.proAccentColor) {
+            const style = document.createElement('style');
+            style.textContent =
+                '.kaspa-kasware-btn { background: ' + d.proAccentColor + ' !important; color: #0a0e1a !important; }' +
+                '.kaspa-payment-header-compact h2 { color: ' + d.proAccentColor + ' !important; }' +
+                '.kaspa-copy-button-compact { color: ' + d.proAccentColor + ' !important; }';
+            document.head.appendChild(style);
+        }
+
+        // Custom KasWare button text
+        if (d.proButtonText) {
+            const btn = document.getElementById('kaspa-kasware-btn');
+            if (btn && !btn.disabled) {
+                btn.textContent = d.proButtonText + ' — ' + (d.expectedAmount || '') + ' KAS';
+            }
+        }
+
+        // Custom instructions (replaces the instructions block content)
+        if (d.proInstructions) {
+            const instrEl = document.querySelector('.kaspa-instructions-compact');
+            if (instrEl) {
+                instrEl.innerHTML = '<p>' + d.proInstructions + '</p>';
+            }
+        }
+
+        // Fee label — appended below the instructions block
+        if (d.feeLabel) {
+            const instrEl = document.querySelector('.kaspa-instructions-compact');
+            if (instrEl) {
+                const feeLine = document.createElement('p');
+                feeLine.style.cssText = 'font-size:12px;color:#888;margin:6px 0 0;';
+                feeLine.textContent = d.feeLabel;
+                instrEl.appendChild(feeLine);
+            }
+        }
+    }
+
+    /**
      * Initialize when DOM is ready
      */
     if (document.readyState === 'loading') {
@@ -730,11 +775,13 @@
             initializeCheckout();
             setupMobileEnhancements();
             setupAccessibility();
+            applyProCustomizations();
         });
     } else {
         initializeCheckout();
         setupMobileEnhancements();
         setupAccessibility();
+        applyProCustomizations();
     }
 
 })();
