@@ -3,10 +3,10 @@
  * Plugin Name: Kaspa Payments Gateway for WooCommerce
  * Plugin URI: https://kaspawoo.com/
  * Description: Accept Kaspa (KAS) cryptocurrency payments in WooCommerce with automatic order confirmation and real-time verification. KPUB watch-only wallet for secure, non-custodial payments. This plugin is not officially affiliated with Kaspa or WooCommerce.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Requires at least: 5.0
  * Requires PHP: 7.4
- * Tested up to: 6.9.1
+ * Tested up to: 6.8
  * Author: KaspaWoo
  * Author URI: https://kaspawoo.com
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Text Domain: kaspa-payments-gateway-woocommerce
  * Requires Plugins: woocommerce
  * WC requires at least: 3.0
- * WC tested up to: 8.0
+ * WC tested up to: 9.8
  */
 
 // Prevent direct access
