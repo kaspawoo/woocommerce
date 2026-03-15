@@ -6,7 +6,7 @@
  * Version: 1.3.0
  * Requires at least: 5.0
  * Requires PHP: 7.4
- * Tested up to: 6.8
+ * Tested up to: 6.9.4
  * Author: KaspaWoo
  * Author URI: https://kaspawoo.com
  * License: GPL v2 or later
@@ -15,7 +15,7 @@
  * Text Domain: kaspa-payments-gateway-woocommerce
  * Requires Plugins: woocommerce
  * WC requires at least: 3.0
- * WC tested up to: 9.8
+ * WC tested up to: 10.6.1
  */
 
 // Prevent direct access
